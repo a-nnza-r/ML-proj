@@ -1,0 +1,7 @@
+.DS_Store
+./Data/ES/dev.in
+./Data/ES/dev.out
+./Data/ES/train
+./Data/RU/dev.in
+./Data/RU/dev.out
+./Data/RU/train

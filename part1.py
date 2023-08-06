@@ -1,6 +1,6 @@
 def readFile(filepath):
     y_count = {}
-    emision_count = {}
+    emission_count = {}
     training_observations_x = []
     with open(filepath, 'r') as file:
         for line in file:
@@ -16,11 +16,11 @@ def readFile(filepath):
                 y_count[y] += 1
             else:
                 y_count[y] = 1
-            if key in emision_count:
-                emision_count[key] += 1
+            if key in emission_count:
+                emission_count[key] += 1
             else:
-                emision_count[key] = 1
-    return y_count, emision_count
+                emission_count[key] = 1
+    return y_count, emission_count, training_observations_x
 
 
 def emision_parameters(x_t, y_t, y_count, emission_count):
@@ -32,10 +32,12 @@ def emision_parameters_updated(x_t,y_t,y_count,emmision_count,k=1):
     else:
         return k/(y_count[y_t]+k)
 
-def simple_sentiment_analysis(x_seq, y_count, emission_count):
+def simple_sentiment_analysis(x_seq, y_count, emission_count, training_observations_x):
     Y = list(y_count.keys())
     seq_pair = []
     for x_s in x_seq:
+        if x_s not in training_observations_x:
+            x_s = "#UNK#"
         max_idx = 0
         max_emission_prob = 0
         for i in range(len(Y)):
@@ -45,6 +47,7 @@ def simple_sentiment_analysis(x_seq, y_count, emission_count):
                 max_emission_prob = emission_prob
         seq_pair.append((x_s, Y[max_idx]))
     return seq_pair
+
 
 
 def readDevIn(filePath):
@@ -70,21 +73,48 @@ def write_seq_pairs_to_file(file_path, list_of_sequences):
                  file.write(f"{x} {y}\n")
             file.write("\n")
 
-def predictNwrite(readDevInPath,y_count,transition_count,writeFilePath):
+def predictNwrite(readDevInPath, y_count, emission_count, training_observations_x, writeFilePath):
     x_sequences = readDevIn(readDevInPath)
     list_of_sequences = [] 
     for x_seq in x_sequences:
-        seq_pairs = simple_sentiment_analysis(x_seq ,y_count , transition_count )
+        seq_pairs = simple_sentiment_analysis(x_seq, y_count, emission_count, training_observations_x)
         list_of_sequences.append(seq_pairs)
-    write_seq_pairs_to_file(writeFilePath,list_of_sequences)
-    
+    write_seq_pairs_to_file(writeFilePath, list_of_sequences)
     
 # RU training 
-y_count_RU, emision_count_RU = readFile("./Data/RU/train")
-predictNwrite("./Data/RU/dev.in" ,y_count_RU,emision_count_RU , "./Data/RU/dev.p1.out" )
+y_count_RU, emission_count_RU, training_observations_x_RU = readFile("./Data/RU/train")
+predictNwrite("./Data/RU/dev.in", y_count_RU, emission_count_RU, training_observations_x_RU, "./Data/RU/dev.p1.out")
+
+
+#Entity in gold data: 389
+#Entity in prediction: 1618
+
+#Correct Entity : 105
+#Entity  precision: 0.0649
+#Entity  recall: 0.2699
+#Entity  F: 0.1046
+
+#Correct Sentiment : 43
+#Sentiment  precision: 0.0266
+#Sentiment  recall: 0.1105
+#Sentiment  F: 0.0429
 
 # ES training 
-y_count_ES, transition_count_ES = readFile("./Data/ES/train")
-predictNwrite("./Data/ES/dev.in",y_count_ES,transition_count_ES, "./Data/ES/dev.p1.out")
+y_count_ES, emission_count_ES, training_observations_x_ES = readFile("./Data/ES/train")
+predictNwrite("./Data/ES/dev.in", y_count_ES, emission_count_ES, training_observations_x_ES, "./Data/ES/dev.p1.out")
+
+
+#Entity in gold data: 229
+#Entity in prediction: 1439
+
+#Correct Entity : 100
+#Entity  precision: 0.0695
+#Entity  recall: 0.4367
+#Entity  F: 0.1199
+
+#Correct Sentiment : 51
+#Sentiment  precision: 0.0354
+#Sentiment  recall: 0.2227
+#Sentiment  F: 0.0612
 
 
