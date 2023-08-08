@@ -23,10 +23,10 @@ def readFileEmissionParameters(filepath):
     return y_count, emission_count, training_observations_x
 
 
-def emision_parameters(x_t, y_t, y_count, emission_count):
+def emission_parameters(x_t, y_t, y_count, emission_count):
     return emission_count.get((y_t, x_t), 0) / y_count.get(y_t, 1)
 
-def emision_parameters_updated(x_t,y_t,y_count,emmision_count,training_observations_x,k=1):
+def emission_parameters_updated(x_t,y_t,y_count,emmision_count,training_observations_x,k=1):
     if(x_t in training_observations_x):
         return emmision_count.get((y_t,x_t),0)/(y_count[y_t]+k)
     else:
@@ -39,7 +39,7 @@ def simple_sentiment_analysis(x_seq, y_count, emission_count,training_observatio
         max_y = None
         max_emission_prob = 0
         for y in Y:
-            emission_prob = emision_parameters_updated(x_s, y, y_count, emission_count,training_observations_x)
+            emission_prob = emission_parameters_updated(x_s, y, y_count, emission_count,training_observations_x)
             if emission_prob > max_emission_prob:
                 max_y = y
                 max_emission_prob = emission_prob

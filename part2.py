@@ -57,11 +57,11 @@ def write_seq_pairs_to_file(file_path, list_of_sequences):
                  file.write(f"{x} {y}\n")
             file.write("\n")
 
-def emision_parameters_updated(x_t,y_t,y_count,emmision_count,training_observations_x,k=1):
+def emission_parameters_updated(x_t,y_t,y_count,emission_count,training_observations_x,k=1):
     if(x_t in training_observations_x):
-        if(emmision_count.get((y_t,x_t),0) == 0 ):
+        if(emission_count.get((y_t,x_t),0) == 0 ):
             return float("-inf")
-        return math.log(emmision_count.get((y_t,x_t),0)/(y_count[y_t]+k))
+        return math.log(emission_count.get((y_t,x_t),0)/(y_count[y_t]+k))
     else:
         return math.log(k/(y_count[y_t]+k))
 
@@ -91,7 +91,7 @@ def viterbi(y_count, emission_count, transition_counts, training_observations_x,
             parent = None
             for u in states:
                 if((k == 0 and u == "START") or u in labels): 
-                    emission_prob = emision_parameters_updated(x_input_seq[k], v, y_count, emission_count,training_observations_x ,1)  # x sequence is indexed from 0 soo k -> k-1
+                    emission_prob = emission_parameters_updated(x_input_seq[k], v, y_count, emission_count,training_observations_x ,1)  # x sequence is indexed from 0 soo k -> k-1
                     transition_prob = transition_parameters(u, v, transition_counts, y_count)
                     possible_u_score = scores[(k, u)] + emission_prob + transition_prob
                     #print("emmsion prob: {0:.10f} transition prob {1:.10f} u_score {1:.10f}".format(emission_prob,transition_prob,possible_u_score))
@@ -143,6 +143,7 @@ def buildModelNwrite(readDevInPath, y_count, emission_count, transition_count, t
 y_count_RU, emission_count_RU, transition_count_RU,training_observations_x_RU = readFile("./Data/RU/train")
 buildModelNwrite("./Data/RU/dev.in", y_count_RU, emission_count_RU, transition_count_RU, training_observations_x_RU,"./Data/RU/dev.p2.out")
 
+# RU
 #Entity in gold data: 389
 #Entity in prediction: 484
 
@@ -162,7 +163,7 @@ buildModelNwrite("./Data/RU/dev.in", y_count_RU, emission_count_RU, transition_c
 y_count_ES, emission_count_ES, transition_count_ES,training_observations_x_ES = readFile("./Data/ES/train")
 buildModelNwrite("./Data/ES/dev.in", y_count_ES, emission_count_ES, transition_count_ES,training_observations_x_ES ,"./Data/ES/dev.p2.out")
 
-
+# ES 
 #Entity in gold data: 229
 #Entity in prediction: 542
 
