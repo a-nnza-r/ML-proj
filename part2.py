@@ -57,11 +57,13 @@ def write_seq_pairs_to_file(file_path, list_of_sequences):
                  file.write(f"{x} {y}\n")
             file.write("\n")
 
-def emision_parameters_updated(x_t, y_t, y_count, emission_count, k=1):
-    if (y_t, x_t) in emission_count.keys():
-        return math.log(emission_count[(y_t, x_t)] / (y_count[y_t] + k))
+def emision_parameters_updated(x_t,y_t,y_count,emmision_count,training_observations_x,k=1):
+    if(x_t in training_observations_x):
+        if(emmision_count.get((y_t,x_t),0) == 0 ):
+            return float("-inf")
+        return math.log(emmision_count.get((y_t,x_t),0)/(y_count[y_t]+k))
     else:
-        return math.log(k / (y_count[y_t] + k))
+        return math.log(k/(y_count[y_t]+k))
 
 def transition_parameters(y_i, y_j, transition_count, y_count):
     numerator = transition_count.get((y_i, y_j), 0)
@@ -70,8 +72,7 @@ def transition_parameters(y_i, y_j, transition_count, y_count):
         return float('-inf')
     return math.log(numerator / denominator)
 
-
-def viterbi(y_count, emission_count, transition_counts, x_input_seq):
+def viterbi(y_count, emission_count, transition_counts, training_observations_x,x_input_seq):
     scores = {}
     parent_pointer = {}
     n = len(x_input_seq)
@@ -90,7 +91,7 @@ def viterbi(y_count, emission_count, transition_counts, x_input_seq):
             parent = None
             for u in states:
                 if((k == 0 and u == "START") or u in labels): 
-                    emission_prob = emision_parameters_updated(x_input_seq[k], v, y_count, emission_count, 1)  # x sequence is indexed from 0 soo k -> k-1
+                    emission_prob = emision_parameters_updated(x_input_seq[k], v, y_count, emission_count,training_observations_x ,1)  # x sequence is indexed from 0 soo k -> k-1
                     transition_prob = transition_parameters(u, v, transition_counts, y_count)
                     possible_u_score = scores[(k, u)] + emission_prob + transition_prob
                     #print("emmsion prob: {0:.10f} transition prob {1:.10f} u_score {1:.10f}".format(emission_prob,transition_prob,possible_u_score))
@@ -101,7 +102,8 @@ def viterbi(y_count, emission_count, transition_counts, x_input_seq):
             #print("current node: {0} parent: {1:} Max score: {2:.10f}".format(v,parent, max_u_score) )
             scores[(k+1, v)] = max_u_score
             parent_pointer[(k+1,v)] = parent
-        print(parent_pointer)
+        #print(parent_pointer)
+
     # Final step
     max_final_transition_score = float("-inf")
     stop_parent = None
@@ -127,12 +129,11 @@ def viterbi(y_count, emission_count, transition_counts, x_input_seq):
     #print(predicted_labels[1:-1])
     return predicted_labels[1:-1] , scores , parent_pointer
 
-def buildModelNwrite(readDevInPath, y_count, emission_count, transition_count, writeFilePath):
+def buildModelNwrite(readDevInPath, y_count, emission_count, transition_count, training_observations_x,writeFilePath):
     x_sequences = readDevIn(readDevInPath)
-    total_sequences = len(x_sequences)
     list_of_sequences = []
     for x_input_seq in x_sequences: 
-        predicted_labels , _ , _ = viterbi(y_count, emission_count, transition_count , x_input_seq)
+        predicted_labels , _ , _ = viterbi(y_count, emission_count, transition_count ,training_observations_x ,x_input_seq)
         list_of_sequences.append(list(zip(x_input_seq,predicted_labels)))
     write_seq_pairs_to_file(writeFilePath, list_of_sequences)
 
@@ -140,37 +141,37 @@ def buildModelNwrite(readDevInPath, y_count, emission_count, transition_count, w
 
 # RU
 y_count_RU, emission_count_RU, transition_count_RU,training_observations_x_RU = readFile("./Data/RU/train")
-buildModelNwrite("./Data/RU/dev.in", y_count_RU, emission_count_RU, transition_count_RU, "./Data/RU/dev.p2.out")
+buildModelNwrite("./Data/RU/dev.in", y_count_RU, emission_count_RU, transition_count_RU, training_observations_x_RU,"./Data/RU/dev.p2.out")
 
 #Entity in gold data: 389
-#Entity in prediction: 426
+#Entity in prediction: 484
 
-#Correct Entity : 1
-#Entity  precision: 0.0023
-#Entity  recall: 0.0026
-#Entity  F: 0.0025
+#Correct Entity : 188
+#Entity  precision: 0.3884
+#Entity  recall: 0.4833
+#Entity  F: 0.4307
 
-#Correct Sentiment : 1
-#Sentiment  precision: 0.0023
-#Sentiment  recall: 0.0026
-#Sentiment  F: 0.0025
+#Correct Sentiment : 129
+#Sentiment  precision: 0.2665
+#Sentiment  recall: 0.3316
+#Sentiment  F: 0.2955
+
 
 
 # ES 
 y_count_ES, emission_count_ES, transition_count_ES,training_observations_x_ES = readFile("./Data/ES/train")
-buildModelNwrite("./Data/ES/dev.in", y_count_ES, emission_count_ES, transition_count_ES, "./Data/ES/dev.p2.out")
+buildModelNwrite("./Data/ES/dev.in", y_count_ES, emission_count_ES, transition_count_ES,training_observations_x_ES ,"./Data/ES/dev.p2.out")
+
 
 #Entity in gold data: 229
-#Entity in prediction: 255
+#Entity in prediction: 542
 
-#Correct Entity : 9
-#Entity  precision: 0.0353
-#Entity  recall: 0.0393
-#Entity  F: 0.0372
+#Correct Entity : 134
+#Entity  precision: 0.2472
+#Entity  recall: 0.5852
+#Entity  F: 0.3476
 
-#Correct Sentiment : 7
-#Sentiment  precision: 0.0275
-#Sentiment  recall: 0.0306
-#Sentiment  F: 0.0289
-
-
+#Correct Sentiment : 97
+#Sentiment  precision: 0.1790
+#Sentiment  recall: 0.4236
+#Sentiment  F: 0.2516
