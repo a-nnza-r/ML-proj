@@ -2,7 +2,7 @@ def readFileEmissionParameters(filepath):
     y_count = {}
     emission_count = {}
     training_observations_x = []
-    with open(filepath, 'r') as file:
+    with open(filepath, 'r',encoding='utf-8') as file:
         for line in file:
             if not line.strip():
                 continue
@@ -100,7 +100,6 @@ predictNwrite("./Data/RU/dev.in", y_count_RU, emission_count_RU, training_observ
 # ES training 
 y_count_ES, emission_count_ES, training_observations_x_ES = readFileEmissionParameters("./Data/ES/train")
 predictNwrite("./Data/ES/dev.in", y_count_ES, emission_count_ES, training_observations_x_ES, "./Data/ES/dev.p1.out")
-
 
 #Entity in gold data: 229
 #Entity in prediction: 1439
