@@ -1,4 +1,4 @@
-def readFile(filepath):
+def readFileEmissionParameters(filepath):
     y_count = {}
     emission_count = {}
     training_observations_x = []
@@ -48,8 +48,6 @@ def simple_sentiment_analysis(x_seq, y_count, emission_count, training_observati
         seq_pair.append((x_s, Y[max_idx]))
     return seq_pair
 
-
-
 def readDevIn(filePath):
     x_sequences = []
     current_sequence = []
@@ -82,7 +80,7 @@ def predictNwrite(readDevInPath, y_count, emission_count, training_observations_
     write_seq_pairs_to_file(writeFilePath, list_of_sequences)
     
 # RU training 
-y_count_RU, emission_count_RU, training_observations_x_RU = readFile("./Data/RU/train")
+y_count_RU, emission_count_RU, training_observations_x_RU = readFileEmissionParameters("./Data/RU/train")
 predictNwrite("./Data/RU/dev.in", y_count_RU, emission_count_RU, training_observations_x_RU, "./Data/RU/dev.p1.out")
 
 
@@ -100,7 +98,7 @@ predictNwrite("./Data/RU/dev.in", y_count_RU, emission_count_RU, training_observ
 #Sentiment  F: 0.0429
 
 # ES training 
-y_count_ES, emission_count_ES, training_observations_x_ES = readFile("./Data/ES/train")
+y_count_ES, emission_count_ES, training_observations_x_ES = readFileEmissionParameters("./Data/ES/train")
 predictNwrite("./Data/ES/dev.in", y_count_ES, emission_count_ES, training_observations_x_ES, "./Data/ES/dev.p1.out")
 
 
