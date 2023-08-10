@@ -212,7 +212,7 @@ buildModelNwrite("./Data/RU/dev.in", y_count_RU, emission_count_RU, transition_c
 y_count_ES, emission_count_ES, transition_count_ES,training_observations_x_ES = readFile("./Data/ES/train")
 buildModelNwrite("./Data/ES/dev.in", y_count_ES, emission_count_ES, transition_count_ES,training_observations_x_ES ,["./Data/ES/dev.p3.1st.out","./Data/ES/dev.p3.2nd.out","./Data/ES/dev.p3.8th.out"],[1,2,8])
 
-# ES 1 st output
+# ES 1 st 
 #Entity in gold data: 229
 #Entity in prediction: 542
 
@@ -241,14 +241,6 @@ buildModelNwrite("./Data/ES/dev.in", y_count_ES, emission_count_ES, transition_c
 #Sentiment  F: 0.1955
 
 # ES 8th output
-#Entity in gold data: 229
-#Entity in prediction: 436
-
-#Correct Entity : 117
-#Entity  precision: 0.2683
-#Entity  recall: 0.5109
-#Entity  F: 0.3519
-
 #Entity in gold data: 229
 #Entity in prediction: 438
 
