@@ -73,41 +73,41 @@ def transition_parameters(y_i, y_j, transition_count, y_count):
     return math.log(numerator / denominator)
 
 def viterbi(y_count, emission_count, transition_counts, training_observations_x,x_input_seq):
+    n = len(x_input_seq)
+    states = list(y_count.keys())
+
     scores = {}
     parent_pointer = {}
-    n = len(x_input_seq)
-    labels = ['O', 'B-positive', 'B-negative', 'B-neutral', 'I-neutral', 'I-positive', 'I-negative']
-    states = ["START",'O', 'B-positive', 'B-negative', 'B-neutral', 'I-neutral', 'I-positive', 'I-negative']
-
-    for k in range(0, n):
+    for k in range(0, n+1):
         for key in states:
             scores[(k, key)] = float("-inf")
     scores[(0, "START")] = 0.0
 
+
     # BOTTOM UP score build
-    for k in range(0, n):
-        for v in labels:
+    #for k in range(0, n):
+    for k in range(1, n+1):
+        for v in states:
             max_u_score = float("-inf")
             parent = None
             for u in states:
-                if((k == 0 and u == "START") or u in labels): 
-                    emission_prob = emission_parameters_updated(x_input_seq[k], v, y_count, emission_count,training_observations_x ,1)  # x sequence is indexed from 0 soo k -> k-1
-                    transition_prob = transition_parameters(u, v, transition_counts, y_count)
-                    possible_u_score = scores[(k, u)] + emission_prob + transition_prob
-                    #print("emmsion prob: {0:.10f} transition prob {1:.10f} u_score {1:.10f}".format(emission_prob,transition_prob,possible_u_score))
-                    if possible_u_score > max_u_score:
-                        max_u_score = possible_u_score
-                        parent = u
+                emission_prob = emission_parameters_updated(x_input_seq[k-1], v, y_count, emission_count,training_observations_x ,1)  # x sequence is indexed from 0 soo k -> k-1
+                transition_prob = transition_parameters(u, v, transition_counts, y_count)
+                possible_u_score = scores[(k-1, u)] + emission_prob + transition_prob
+                #print("emmsion prob: {0:.10f} transition prob {1:.10f} u_score {1:.10f}".format(emission_prob,transition_prob,possible_u_score))
+                if possible_u_score > max_u_score:
+                    max_u_score = possible_u_score
+                    parent = u
                     #print("k:{0} {1:>10}->{2:<10} P:{3} ms: {4:.10f} cs: {5:.10f}".format(k,u,v,parent, max_u_score, possible_u_score) )
             #print("current node: {0} parent: {1:} Max score: {2:.10f}".format(v,parent, max_u_score) )
-            scores[(k+1, v)] = max_u_score
-            parent_pointer[(k+1,v)] = parent
+            scores[(k, v)] = max_u_score
+            parent_pointer[(k,v)] = parent
         #print(parent_pointer)
 
     # Final step
     max_final_transition_score = float("-inf")
     stop_parent = None
-    for v in labels:
+    for v in states:
         score = scores[(n, v)] + transition_parameters(v, "STOP", transition_counts, y_count)
         if score > max_final_transition_score:
             max_final_transition_score = score
@@ -117,16 +117,16 @@ def viterbi(y_count, emission_count, transition_counts, training_observations_x,
 
     scores[(n+1, "STOP")] = max_final_transition_score
     parent_pointer[(n+1,"STOP")] = stop_parent
-    predicted_labels = ["STOP"]
-    current_label = "STOP"
+
+
     #print(scores)
     #print(parent_pointer)
-
+    predicted_labels = ["STOP"]
+    current_label = "STOP"
     for i in range(n+1,0,-1):
         parent = parent_pointer.get((i,current_label))
         predicted_labels.insert(0,parent)
         current_label = parent
-    #print(predicted_labels[1:-1])
     return predicted_labels[1:-1] , scores , parent_pointer
 
 def buildModelNwrite(readDevInPath, y_count, emission_count, transition_count, training_observations_x,writeFilePath):
