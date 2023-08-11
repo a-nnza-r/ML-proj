@@ -11,7 +11,7 @@ def prepare_data(file_path):
         dictionary: observation_to_idx - a mapping of each observation to the index
         list: states - a list of unique states
         list: observations - a list of unique observations
-        list: data - list of tuples (observation, state)
+        string: train_data - training data as a whole string
 
     """
     with open(file_path, 'r', encoding="utf-8") as file:
@@ -31,164 +31,174 @@ def prepare_data(file_path):
             observations.add(observation)
             data.append((observation, state))
 
-    state_to_idx = {state: idx for idx, state in enumerate(states)}
-    observation_to_idx = {obs: idx for idx, obs in enumerate(observations)}
+    # add START and STOP states
+    states.add("START")
+    states.add("STOP")
+    
+    # add #UNK# observation
+    observations.add("#UNK#")
+    
+    state_to_idx = {state: idx for idx, state in enumerate(sorted(states))}
+    observation_to_idx = {obs: idx for idx, obs in enumerate(sorted(observations))}
+    
+    # read train_data
+    with open(file_path, 'r', encoding="utf-8") as file:
+        train_data = file.read()
 
-    return state_to_idx, observation_to_idx, list(states), list(observations), data
+    return state_to_idx, observation_to_idx, sorted(states), sorted(observations), train_data
 
-def initialize_parameters(states, observations):
-    """Initialize the transition and emission probabilities
+
+def estimate_emission_parameters(train_data, states, observations, state_to_idx, observation_to_idx, k=1):
+    """Estimate the emission probabilities
 
     Args:
+        train_data (string): Training data as a whole string
         states (list): List of unique states
         observations (list): List of unique observations
+        state_to_idx (dict): Mapping of each state to the index
+        observation_to_idx (dict): Mapping of each observation to the index
+        k (int): Smoothing parameter
 
     Returns:
-        numpy array: transition_prob - transition probabilities between states
-        numpy array: emission_prob - emission probabilities of observations given states
+        numpy array: Emission probabilities of shape (num_states, num_observations)
 
     """
     num_states = len(states)
     num_observations = len(observations)
+    
+    # Initialize counts
+    emission_counts = np.zeros((num_states, num_observations))
+    state_counts = np.zeros(num_states)
 
-    # Initialize transition and emission probabilities uniformly
-    transition_prob = np.ones((num_states, num_states)) / num_states
-    emission_prob = np.ones((num_states, num_observations)) / num_observations
+    # Split the training data into sentences
+    sentences = train_data.strip().split('\n\n')
 
-    return transition_prob, emission_prob
+    for sentence in sentences:
+        lines = sentence.strip().split('\n')
+        for line in lines:
+            observation, state = line.rsplit(' ', 1)
+            if observation not in observation_to_idx:
+                observation = "#UNK#"
+            state_idx = state_to_idx[state]
+            observation_idx = observation_to_idx[observation]
+            emission_counts[state_idx, observation_idx] += 1
+            state_counts[state_idx] += 1
 
+    # Apply smoothing and calculate probabilities
+    emission_probabilities = (emission_counts + k) / (state_counts[:, None] + k * num_observations)
 
-def train_hmm(data, state_to_idx, observation_to_idx, transition_prob, emission_prob, iterations=10):
-    """Train the Hidden Markov Model using the given data
+    # Set emission probabilities for START and STOP states to 0
+    emission_probabilities[state_to_idx["START"], :] = 0
+    emission_probabilities[state_to_idx["STOP"], :] = 0
 
-    Args:
-        data (list): List of tuples (observation, state)
-        state_to_idx (dict): Mapping of states to indices
-        observation_to_idx (dict): Mapping of observations to indices
-        transition_prob (numpy array): Initial transition probabilities
-        emission_prob (numpy array): Initial emission probabilities
-        iterations (int): Number of training iterations
+    return emission_probabilities
 
-    Returns:
-        numpy array: Updated transition probabilities
-        numpy array: Updated emission probabilities
-
-    """
-    num_states = len(state_to_idx)
-    num_observations = len(observation_to_idx)
-
-    for iteration in range(iterations):
-        # Counters for transition and emission probabilities
-        transition_count = np.zeros((num_states, num_states))
-        emission_count = np.zeros((num_states, num_observations))
-
-        # Iterate through the data to update counts
-        for i in range(len(data) - 1):
-            obs_idx_curr = observation_to_idx[data[i][0]]
-            obs_idx_next = observation_to_idx[data[i + 1][0]]
-            state_idx_curr = state_to_idx[data[i][1]]
-            state_idx_next = state_to_idx[data[i + 1][1]]
-
-            transition_count[state_idx_curr, state_idx_next] += 1
-            emission_count[state_idx_curr, obs_idx_curr] += 1
-
-        # Update transition and emission probabilities
-        transition_prob = transition_count / transition_count.sum(axis=1, keepdims=True)
-        emission_prob = (emission_count + 1) / (emission_count.sum(axis=1, keepdims=True) + num_observations)
-
-    return transition_prob, emission_prob
-
-def viterbi(observation_sequence, state_to_idx, observation_to_idx, transition_prob, emission_prob):
-    """Viterbi algorithm to predict the most likely sequence of states
+def estimate_transmission_parameters(train_data, states, state_to_idx):
+    """Estimate the transmission probabilities
 
     Args:
-        observation_sequence (list): List of observations (words)
-        state_to_idx (dict): Mapping of states to indices
-        observation_to_idx (dict): Mapping of observations to indices
-        transition_prob (numpy array): Transition probabilities between states
-        emission_prob (numpy array): Emission probabilities of observations given states
+        train_data (string): Training data as a whole string
+        states (list): List of unique states
+        state_to_idx (dict): Mapping of each state to the index
 
     Returns:
-        list: Predicted sequence of states (tags)
+        numpy array: Transmission probabilities of shape (num_states, num_states)
 
     """
-    num_states = len(state_to_idx)
-    num_observations = len(observation_sequence)
-    dp = np.zeros((num_states, num_observations))
-    backpointer = np.zeros((num_states, num_observations), dtype=int)
+    num_states = len(states)
+    
+    # Initialize counts
+    transition_counts = np.zeros((num_states, num_states))
+    state_counts = np.zeros(num_states)
 
-    # Initialization step
-    obs_idx = observation_to_idx[observation_sequence[0]]
-    dp[:, 0] = emission_prob[:, obs_idx]
+    # Split the training data into sentences
+    sentences = train_data.strip().split('\n\n')
 
-    # Recursion step
-    for t in range(1, num_observations):
-        obs_idx = observation_to_idx[observation_sequence[t]]
+    for sentence in sentences:
+        lines = sentence.strip().split('\n')
+        prev_state = "START"
+        for line in lines:
+            _, current_state = line.rsplit(' ', 1)
+            transition_counts[state_to_idx[prev_state], state_to_idx[current_state]] += 1
+            state_counts[state_to_idx[prev_state]] += 1
+            prev_state = current_state
+        # Transition to STOP state
+        transition_counts[state_to_idx[prev_state], state_to_idx["STOP"]] += 1
+        state_counts[state_to_idx[prev_state]] += 1
+
+    # Calculate probabilities
+    transmission_probabilities = transition_counts / state_counts[:, None]
+
+    return transmission_probabilities
+
+def viterbi(test_data, states, observations, state_to_idx, observation_to_idx, emission_probabilities, transmission_probabilities):
+    # Split the test data into sentences
+    sentences = test_data.strip().split('\n\n')
+    predicted_tags = []
+
+    for sentence in sentences:
+        words = sentence.strip().split('\n')
+        num_words = len(words)
+        num_states = len(states)
+
+        # Initialize Viterbi matrix and backpointer matrix
+        viterbi_matrix = np.zeros((num_states, num_words))
+        backpointer = np.zeros((num_states, num_words), dtype=int)
+
+        # Initialization step
+        start_idx = state_to_idx["START"]
         for s in range(num_states):
-            trans_prob = transition_prob[:, s] * dp[:, t - 1]
-            max_trans_prob = np.max(trans_prob) # Max transition probability - highest likelihood from previous state to current state
-            backpointer[s, t] = np.argmax(trans_prob) # Backpointer - index of previous state with highest likelihood
-            dp[s, t] = max_trans_prob * emission_prob[s, obs_idx] # Update likelihood of current state
+            word = words[0]
+            if word not in observation_to_idx:
+                word = "#UNK#"
+            observation_idx = observation_to_idx[word]
+            viterbi_matrix[s, 0] = transmission_probabilities[start_idx, s] * emission_probabilities[s, observation_idx]
 
-    # Termination step
-    best_path = np.zeros(num_observations, dtype=int)
-    best_path[-1] = np.argmax(dp[:, -1])
+        # Recursion step
+        for t in range(1, num_words):
+            word = words[t]
+            if word not in observation_to_idx:
+                word = "#UNK#"
+            observation_idx = observation_to_idx[word]
+            for s in range(num_states):
+                trans_prob = transmission_probabilities[:, s] * viterbi_matrix[:, t-1]
+                max_trans_prob = np.max(trans_prob)
+                backpointer[s, t] = np.argmax(trans_prob)
+                viterbi_matrix[s, t] = max_trans_prob * emission_probabilities[s, observation_idx]
 
-    # Backtrack to find the best path
-    for t in range(num_observations - 2, -1, -1):
-        best_path[t] = backpointer[best_path[t + 1], t + 1]
+        # Termination step
+        best_last_tag = np.argmax(viterbi_matrix[:, -1])
+        best_path = [best_last_tag]
 
-    # Convert indices to state names
-    idx_to_state = {idx: state for state, idx in state_to_idx.items()}
-    predicted_states = [idx_to_state[idx] for idx in best_path]
+        # Backtrack to find the best path
+        for t in range(num_words-1, 0, -1):
+            best_last_tag = backpointer[best_last_tag, t]
+            best_path.insert(0, best_last_tag)
 
-    return predicted_states
+        # Convert state indices to state names
+        predicted_tags.append([states[s] for s in best_path])
 
-def write_predictions_to_file(file_path, observation_sequence, predicted_states):
-    """Write the observations and predicted states to a file
+    return predicted_tags
 
-    Args:
-        file_path (string): Output file path
-        observation_sequence (list): List of observations (words)
-        predicted_states (list): List of predicted states (tags)
-
-    """
-    with open(file_path, 'w') as file:
-        for observation, state in zip(observation_sequence, predicted_states):
-            file.write(f"{observation} {state}\n")
-
+def write_predictions_to_file(file_path, predicted_sequences):
+    pass
 
 def main():
-    file_path = 'Data\\ES\\train'
-    state_to_idx, observation_to_idx, states, observations, data = prepare_data(file_path)
-    transition_prob, emission_prob = initialize_parameters(states, observations)
-    transition_prob, emission_prob = train_hmm(data, state_to_idx, observation_to_idx, transition_prob, emission_prob)
+    file_path = "Data\\ES\\train"
+    state_to_idx, observation_to_idx, states, observations, train_data = prepare_data(file_path)
 
-    # print('Transition probabilities:')
-    # print(transition_prob)
+    emission_prob = estimate_emission_parameters(train_data, states, observations, state_to_idx, observation_to_idx, k=1)
     
-    # print('Emission probabilities:')
-    # print(emission_prob)
+    transition_prob = estimate_transmission_parameters(train_data, states, state_to_idx)
     
-    # Test the model on the test set
-    file_path = "Data\\ES\\dev.in"
-    observation_sequence = []
-    with open(file_path, 'r', encoding="utf-8") as file:
-        initial_observation_sequence = file.read().splitlines() # splitlines() removes trailing newline characters
-        
-        # formatting observation sequence
-        for observation in initial_observation_sequence:
-            if observation: # Non-empty line
-                observation = observation.strip() # remove trailing newline characters
-                observation_sequence.append(observation)
-
-    # print(observation_sequence)
-    predicted_states = viterbi(observation_sequence, state_to_idx, observation_to_idx, transition_prob, emission_prob)
+    test_file_path = "Data\\ES\\dev.in"
+    with open(test_file_path, 'r', encoding="utf-8") as file:
+        test_data = file.read()
     
-    print(predicted_states)
+    print(state_to_idx)
+    print(transition_prob)
+    predicted_tags = viterbi(test_data, states, observations, state_to_idx, observation_to_idx, emission_prob, transition_prob)
     
-    # file_path = "Data\\ES\\dev.p4.out"
-    # write_predictions_to_file(file_path, observation_sequence, predicted_states)
-    
+    #print(predicted_tags)
 if __name__ == "__main__":
     main()
