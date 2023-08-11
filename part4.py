@@ -94,7 +94,7 @@ def train_hmm(data, state_to_idx, observation_to_idx, transition_prob, emission_
 
         # Update transition and emission probabilities
         transition_prob = transition_count / transition_count.sum(axis=1, keepdims=True)
-        emission_prob = emission_count / emission_count.sum(axis=1, keepdims=True)
+        emission_prob = (emission_count + 1) / (emission_count.sum(axis=1, keepdims=True) + num_observations)
 
     return transition_prob, emission_prob
 
