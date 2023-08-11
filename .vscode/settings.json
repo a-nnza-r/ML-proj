@@ -1,0 +1,7 @@
+{
+    "editor.formatOnSave": true,
+    "javascript.preferences.quoteStyle": "double",
+    "typescript.preferences.quoteStyle": "auto",
+    "editor.formatOnPaste": true,
+    "notebook.formatOnSave.enabled": true
+}
