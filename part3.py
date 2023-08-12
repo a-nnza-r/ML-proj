@@ -59,20 +59,32 @@ def write_seq_pairs_to_file(file_path, list_of_sequences):
 
 def emission_parameters_updated(x_t,y_t,y_count,emission_count,training_observations_x,k=1):
     if(x_t in training_observations_x):
+        ## if count does not exist we shall set the return value to be 0 without dividing to prevent divide by 0 error 
         if(emission_count.get((y_t,x_t),0) == 0 ):
             return float("-inf")
+        ## we take log to avoid underflow issues 
         return math.log(emission_count.get((y_t,x_t),0)/(y_count[y_t]+k))
     else:
+        ## we take log to avoid underflow issues 
         return math.log(k/(y_count[y_t]+k))
 
 def transition_parameters(y_i, y_j, transition_count, y_count):
     numerator = transition_count.get((y_i, y_j), 0)
     denominator = y_count[y_i]
-    if numerator == 0:
+    if numerator == 0:    ## if count does not exist we shall set the return value to be 0 without dividing to prevent log zero err 
         return float('-inf')
     return math.log(numerator / denominator)
 
 def k_best_viterbi(y_count, emission_count, transition_counts, training_observations_x, x_input_seq, k=1):
+    """
+        in this modification of the veterbi algorithm in each entry of the DP memo we store not just a singular best score at the position
+        but a sorted list (decreasing order) of k best scores , each computed from a different transition. Also take note that betweeen each 
+        transtion from state u at layer j-1 to v at layer j , we must also consider the the trasition from anyone of the k scores stored in scores[(j-1,u)],
+        since scores[(j-1,u)] contains k sets of scores , this is becasue each of those score are a result of a different path taken to arrive at node (j-1,u). 
+
+        In addition to the just storing the k scores in the list at each memo slot scores[(j,v)] we take one futher step to store, backpointers to the parents as well
+        the index of in which take path predesessor score from i.e scores[(j-1,u)] , this is done so as to ease the process of backtracking.
+    """
     n = len(x_input_seq)
     states = list(y_count.keys())
 
@@ -93,19 +105,19 @@ def k_best_viterbi(y_count, emission_count, transition_counts, training_observat
     for t in range(1, n+1):
         for v in states:
             if (v == "START") or (v == "STOP"): continue 
-            all_scores = []
+            all_scores = [] # we maintain a list that stores all the transitions from u to v and store the respective score they result in  
             for u in states:
-                if (u == "STOP") or (u == "START" and t != 1): continue   
-                #for idxInParentScoreList in range(k):
+                if (u == "STOP") or (u == "START" and t != 1): continue   # this is simply done to clean up print statements in the debugging phase removing these does not change the result
                 for idx , score_tup in enumerate(scores[(t-1, u)]): 
+                    # This extra for loop is the main point of divergence form the original viterbi algorithm as we take multiple transition
+                    # from each previous state u , as detailed above we must do this take into account the top k paths at the previosu node u 
                     emission_prob = emission_parameters_updated(x_input_seq[t-1], v, y_count, emission_count, training_observations_x, 1)
                     transition_prob = transition_parameters(u, v, transition_counts, y_count)
                     current_v_score = score_tup[0] + emission_prob + transition_prob
-                    #if(current_v_score > float('-inf')):
-                    all_scores.append((current_v_score, u , idx)) #idxInParentScoreList))
+                    all_scores.append((current_v_score, u , idx)) 
                         #print("layer {0} ({1},{2})->{3} cs:{4}".format(t,u,idx,v,current_v_score))
             #extract the k best scores and update the memo 
-            scores[(t, v)] = sorted(all_scores, reverse=True)[:k]
+            scores[(t, v)] = sorted(all_scores, reverse=True)[:k] # we slice this list to consider only the top k scores , since we only need k paths at the terminal STOP node 
             #print("score list at ({0:>},{1:<}):{2}".format(t,v,scores[(t, v)]))
         #print("\n")
     
@@ -114,21 +126,23 @@ def k_best_viterbi(y_count, emission_count, transition_counts, training_observat
     for u in states:
         if (u == "START") or (u == "STOP"): continue 
         #for idxInParentScoreList in range(k):
-        for idx , score_tup in enumerate(scores[(n, u)]): 
-            #k_score_at_STOP, _ , _ = scores[(n, v)][idxInParentScoreList]
+        for idx , score_tup in enumerate(scores[(n, u)]): # Pelase refer to thte enumeration line above similar ligic applies here too (i mean refer to the main loop of virterbi)
             transition_prob = transition_parameters(u, "STOP", transition_counts, y_count)
             current_v_score = score_tup[0] + transition_prob
-            #if(current_v_score > float('-inf')):
-            all_scores.append((current_v_score, u , idx)) #idxInParentScoreList))
+            all_scores.append((current_v_score, u , idx))
                 #print("layer {0} ({1},{2})->{3} cs:{4}".format(n+1,u,idx,"STOP",current_v_score))
-            #all_scores.append((current_v_score, v, idx))
     scores[(n+1, "STOP")] = sorted(all_scores, reverse=True)[:k]
-    #print("score list at ({0:>},{1:<}):{2}".format(n+1,"STOP",scores[(n+1, "STOP")]))
+    #print("score list at ({0:>},{1:<}):{2}".format(n+1,"STOP",scores[(n+1, "STOP")])) 
+
+    ### Now that we have arrived at the stop state , similar to original viterbi algorithm we have computes the best path from START to STOP 
+    ### However instead of getting merely one best score we now have colelcted the top k 
+    ### however we take up a extra compoutation to do this the TC of the forward parse of the algorithm now increases to O(knT^2)
+    ### All we have to do now is use backpropagation to build the k best paths from STOP all thte way back to START 
 
     # Reconstruct k-best paths
     k_best_paths = []
     score_list = [(n + 1, "STOP")]
-    for idx_in_STOP_list in range(k):
+    for idx_in_STOP_list in range(k): ## For each of the scores at scores[(n+1,"STOP")] we backtrack all the way to the "START" 
         path = []
         #print("printing final score list:", scores[(n+1,"STOP")], idx_in_STOP_list)
         score , parent , idx_in_parent = scores[(n+1,"STOP")][idx_in_STOP_list]
@@ -140,6 +154,11 @@ def k_best_viterbi(y_count, emission_count, transition_counts, training_observat
         k_best_paths.append(path)
     #print(k_best_paths)
     return k_best_paths , scores
+
+    ### since we use baack pointers to both the parent and the index in the parents list we can perform backproagation for each of the paths in O(n)
+    ### since we have to do this for k differnt score the time complexity is a resultant O(kn)
+
+    ### Therefore the overall TC of decoding k best paths would be o(knT^2)
 
 def buildModelNwrite(readDevInPath, y_count, emission_count, transition_count, training_observations_x,writeFilePathList,k_paths_to_extract):
     x_sequences = readDevIn(readDevInPath)
