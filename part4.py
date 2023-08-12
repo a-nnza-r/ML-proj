@@ -192,19 +192,21 @@ def viterbi(test_data, states, state_to_idx, observation_to_idx, emission_probab
     sentences = test_data.strip().split('\n\n')
     predicted_tags = []
     
-    for sentence in sentences:
+    for sentence in sentences: # assume each chunk separated by a newline in the test data is a sentence
         words = sentence.strip().split('\n')
         num_words = len(words)
         num_states = len(states)
-
+        
+        # initialize viterbi matrix (tabulation table) and backpointers matrix (for convenience to backtrack later)
         viterbi_matrix = np.zeros((num_states, num_words+2))
-        backpointers = np.zeros((num_states, num_words+2), dtype=int) # Added backpointers for backtracking
+        backpointers = np.zeros((num_states, num_words+2), dtype=int) # Backpointers matrix for recording the index of best previous state
 
+        # step 1 - initialization
         start_idx = state_to_idx["START"]
         stop_idx = state_to_idx["STOP"]
         viterbi_matrix[start_idx, 0] = 1
 
-        # Recursion step
+        # step 2 - recurrence
         for j in range(1, num_words+1):
             word = words[j-1]
             if word not in observation_to_idx:
@@ -214,13 +216,17 @@ def viterbi(test_data, states, state_to_idx, observation_to_idx, emission_probab
                 if s == start_idx or s == stop_idx:
                     continue
                 max_trans_prob = 0
-                for prev_s in range(num_states): # Added loop to consider previous states
+                # finding the max transition probability from all previous states to current state
+                for prev_s in range(num_states): 
                     trans_prob = transmission_probabilities[prev_s, s] * viterbi_matrix[prev_s, j-1]
                     if trans_prob > max_trans_prob:
                         max_trans_prob = trans_prob
+                        
+                # update viterbi matrix and backpointers matrix
                 viterbi_matrix[s, j] = max_trans_prob * emission_probabilities[s, observation_idx]
                 backpointers[s, j] = np.argmax(transmission_probabilities[:, s] * viterbi_matrix[:, j-1]) # Added backpointer
 
+        # step 3 - termination
         stop_trans_prob = transmission_probabilities[:, stop_idx] * viterbi_matrix[:, num_words]
         max_stop_trans_prob = np.max(stop_trans_prob)
         viterbi_matrix[stop_idx, num_words+1] = max_stop_trans_prob
@@ -229,7 +235,7 @@ def viterbi(test_data, states, state_to_idx, observation_to_idx, emission_probab
         best_path = [best_last_tag]
 
         # Backtrack using backpointers
-        for i in range(num_words, 1, -1): # Modified backtracking using backpointers
+        for i in range(num_words, 1, -1): 
             best_tag = backpointers[best_last_tag, i]
             best_path.insert(0, best_tag)
             best_last_tag = best_tag
@@ -239,6 +245,13 @@ def viterbi(test_data, states, state_to_idx, observation_to_idx, emission_probab
     return predicted_tags
 
 def write_predictions_to_file(file_path, predicted_sequences, test_data):
+    """write to file the predicted sequences
+
+    Args:
+        file_path (string): the file path and name to write to
+        predicted_sequences (a list of sentences): each sentence is a list of predicted tags
+        test_data (string): a string of the test data
+    """
     with open(file_path, 'w', encoding="utf-8") as file:
         sentences = test_data.strip().split('\n\n')
         for i, sentence in enumerate(sentences):
@@ -247,7 +260,7 @@ def write_predictions_to_file(file_path, predicted_sequences, test_data):
                 file.write(word + ' ' + predicted_sequences[i][j] + '\n')
             file.write('\n')
 
-def main():
+def predict_es():
     file_path = "Data\\ES\\train"
     state_to_idx, observation_to_idx, states, observations, train_data = prepare_data(file_path)
 
@@ -265,7 +278,28 @@ def main():
     predicted_tags = viterbi(test_data, states, state_to_idx, observation_to_idx, emission_prob, transition_prob)
     # print(predicted_tags)
     
-    write_predictions_to_file("Testing\\dev.test", predicted_tags, test_data)
+    write_predictions_to_file("Testing\\es.dev.test", predicted_tags, test_data)
+    
+def predict_ru():
+    file_path = "Data\\RU\\train"
+    state_to_idx, observation_to_idx, states, observations, train_data = prepare_data(file_path)
+
+    emission_prob = estimate_emission_parameters(train_data, states, observations, state_to_idx, observation_to_idx, k=1)
+    
+    transition_prob = estimate_transmission_parameters(train_data, states, state_to_idx)
+    
+    test_file_path = "Data\\RU\\dev.in"
+    with open(test_file_path, 'r', encoding="utf-8") as file:
+        test_data = file.read()
+    
+    # print(state_to_idx)
+    # print(transition_prob)
+    
+    predicted_tags = viterbi(test_data, states, state_to_idx, observation_to_idx, emission_prob, transition_prob)
+    # print(predicted_tags)
+    
+    write_predictions_to_file("Testing\\ru.dev.test", predicted_tags, test_data)
     
 if __name__ == "__main__":
-    main()
+    predict_es()
+    predict_ru()
