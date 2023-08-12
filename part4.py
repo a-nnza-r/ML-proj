@@ -48,7 +48,6 @@ def prepare_data(file_path):
 
     return state_to_idx, observation_to_idx, sorted(states), sorted(observations), train_data
 
-
 def estimate_emission_parameters(train_data, states, observations, state_to_idx, observation_to_idx, k=1):
     """Estimate the emission probabilities
 
@@ -136,6 +135,64 @@ def estimate_transmission_parameters(train_data, states, state_to_idx):
     nan_mask = np.isnan(transmission_probabilities)
     transmission_probabilities[nan_mask] = 0 # set all transition probabilities from STOP to 0
     return transmission_probabilities
+
+# Witten-Bell smoothing
+def estimate_emission_parameters_witten_bell(train_data, states, observations, state_to_idx, observation_to_idx):
+    num_states = len(states)
+    num_observations = len(observations)
+    emission_counts = np.zeros((num_states, num_observations))
+    state_counts = np.zeros(num_states)
+    sentences = train_data.strip().split('\n\n')
+
+    for sentence in sentences:
+        lines = sentence.strip().split('\n')
+        for line in lines:
+            observation, state = line.rsplit(' ', 1)
+            state_idx = state_to_idx[state]
+            observation_idx = observation_to_idx[observation]
+            emission_counts[state_idx, observation_idx] += 1
+            state_counts[state_idx] += 1
+
+    ### Witten-Bell smoothing ###
+    unique_observations_per_state = np.count_nonzero(emission_counts, axis=1)
+    lambdas = unique_observations_per_state / (unique_observations_per_state + state_counts)
+    emission_probabilities = lambdas[:, None] * (emission_counts / state_counts[:, None]) + (1 - lambdas[:, None]) / num_observations
+
+    emission_probabilities[state_to_idx["START"], :] = 0
+    emission_probabilities[state_to_idx["STOP"], :] = 0
+
+    return emission_probabilities
+
+# Absolute discounting
+def estimate_emission_parameters_absolute_discounting(train_data, states, observations, state_to_idx, observation_to_idx, d=0.5):
+    num_states = len(states)
+    num_observations = len(observations)
+    emission_counts = np.zeros((num_states, num_observations))
+    state_counts = np.zeros(num_states)
+    sentences = train_data.strip().split('\n\n')
+
+    for sentence in sentences:
+        lines = sentence.strip().split('\n')
+        for line in lines:
+            observation, state = line.rsplit(' ', 1)
+            state_idx = state_to_idx[state]
+            observation_idx = observation_to_idx[observation]
+            emission_counts[state_idx, observation_idx] += 1
+            state_counts[state_idx] += 1
+
+
+    # Calculate probabilities with absolute discounting
+    
+    # the main idea here is to redistribute the weightage of words we observed to words we didn't see before #UNK#
+    emission_probabilities = (np.maximum(emission_counts - d, 0)) / state_counts[:, None] # normalise by state counts
+    unk_prob = d * np.count_nonzero(emission_counts, axis=1) / state_counts # Multiply discount d by the number of non-zero emission counts and divide by state counts
+    
+    emission_probabilities += unk_prob[:, None] / num_observations
+
+    emission_probabilities[state_to_idx["START"], :] = 0
+    emission_probabilities[state_to_idx["STOP"], :] = 0
+
+    return emission_probabilities
 
 def viterbi(test_data, states, state_to_idx, observation_to_idx, emission_probabilities, transmission_probabilities):
     sentences = test_data.strip().split('\n\n')
@@ -230,8 +287,28 @@ def compute_scores(gold_file_path, predicted_file_path):
     
     return correct_entity, correct_sentiment, entity_prec, entity_rec, entity_f, sentiment_prec, sentiment_rec, sentiment_f
 
+def best_results(results):
+    highest_entity_f = 0
+    highest_entity_method = ""
+    highest_sentiment_f = 0
+    highest_sentiment_method = ""
+    
+    for method, result in results.items():
+        # method is the method name, result is a dictionary of the method's results
+        if result["entity_f"] > highest_entity_f:
+            highest_entity_f = result["entity_f"]
+            highest_entity_method = method
+        if result["sentiment_f"] > highest_sentiment_f:
+            highest_sentiment_f = result["sentiment_f"]
+            highest_sentiment_method = method
+
+    print(f"Best method for entity recognition: {highest_entity_method} with F-score {highest_entity_f}")
+    print(f"Best method for sentiment recognition: {highest_sentiment_method} with F-score {highest_sentiment_f}")
+    
+    return highest_entity_method, highest_sentiment_method
 
 def predict_es():
+    results = {}
     file_path = "Data\\ES\\train"
     state_to_idx, observation_to_idx, states, observations, train_data = prepare_data(file_path)
 
@@ -258,21 +335,37 @@ def predict_es():
         
         correct_entity, correct_sentiment, entity_prec, entity_rec, entity_f, sentiment_prec, sentiment_rec, sentiment_f = compute_scores(gold_file_path, output_file_path)
         
+        # add results to dictionary
         
-        print("k = " + str(k))
-        print("correct_entity = " + str(correct_entity))
-        print("correct_sentiment = " + str(correct_sentiment))
-        print("entity_prec = " + str(entity_prec))
-        print("entity_rec = " + str(entity_rec))
-        print("entity_f = " + str(entity_f))
-        print("sentiment_prec = " + str(sentiment_prec))
-        print("sentiment_rec = " + str(sentiment_rec))
-        print("sentiment_f = " + str(sentiment_f))
-        print()
-        
+        results[f"laplace_{k}"] = {"correct_entity": correct_entity, "correct_sentiment": correct_sentiment, "entity_prec": entity_prec, "entity_rec": entity_rec, "entity_f": entity_f, "sentiment_prec": sentiment_prec, "sentiment_rec": sentiment_rec, "sentiment_f": sentiment_f}
 
+    # comparin other smoothing methods
+    
+    # absolute discounting
+    d_values = [0.1 * i for i in range(1, 11)] # d = 0.1, 0.2, ..., 1.0
+    for d in d_values:
+        abs_emission_prob = estimate_emission_parameters_absolute_discounting(train_data, states, observations, state_to_idx, observation_to_idx, d=d)
+        # Run Viterbi on the validation data
+        predicted_tags = viterbi(validation_data, states, state_to_idx, observation_to_idx, abs_emission_prob, transition_prob)
+        output_file_path = "Testing\\es.dev.abs"+str(d)
+        write_predictions_to_file(output_file_path, predicted_tags, validation_data)
+        correct_entity, correct_sentiment, entity_prec, entity_rec, entity_f, sentiment_prec, sentiment_rec, sentiment_f = compute_scores(gold_file_path, output_file_path)
+        
+        results[f"abs_{d}"] = {"correct_entity": correct_entity, "correct_sentiment": correct_sentiment, "entity_prec": entity_prec, "entity_rec": entity_rec, "entity_f": entity_f, "sentiment_prec": sentiment_prec, "sentiment_rec": sentiment_rec, "sentiment_f": sentiment_f}
+        
+    # witten bell smoothing
+    wb_emission_prob = estimate_emission_parameters_witten_bell(train_data, states, observations, state_to_idx, observation_to_idx)
+    predicted_tags = viterbi(validation_data, states, state_to_idx, observation_to_idx, wb_emission_prob, transition_prob)
+    output_file_path = "Testing\\es.dev.wb"
+    write_predictions_to_file(output_file_path, predicted_tags, validation_data)
+    correct_entity, correct_sentiment, entity_prec, entity_rec, entity_f, sentiment_prec, sentiment_rec, sentiment_f = compute_scores(gold_file_path, output_file_path)
+    
+    results["wb"] = {"correct_entity": correct_entity, "correct_sentiment": correct_sentiment, "entity_prec": entity_prec, "entity_rec": entity_rec, "entity_f": entity_f, "sentiment_prec": sentiment_prec, "sentiment_rec": sentiment_rec, "sentiment_f": sentiment_f}
+    
+    highest_entity_method, highest_sentiment_method = best_results(results)
     
 def predict_ru():
+    results = {}
     file_path = "Data\\RU\\train"
     state_to_idx, observation_to_idx, states, observations, train_data = prepare_data(file_path)
 
@@ -299,19 +392,42 @@ def predict_ru():
         
         correct_entity, correct_sentiment, entity_prec, entity_rec, entity_f, sentiment_prec, sentiment_rec, sentiment_f = compute_scores(gold_file_path, output_file_path)
         
+        # add results to dictionary
         
-        print("k = " + str(k))
-        print("correct_entity = " + str(correct_entity))
-        print("correct_sentiment = " + str(correct_sentiment))
-        print("entity_prec = " + str(entity_prec))
-        print("entity_rec = " + str(entity_rec))
-        print("entity_f = " + str(entity_f))
-        print("sentiment_prec = " + str(sentiment_prec))
-        print("sentiment_rec = " + str(sentiment_rec))
-        print("sentiment_f = " + str(sentiment_f))
-        print()
+        results[f"laplace_{k}"] = {"correct_entity": correct_entity, "correct_sentiment": correct_sentiment, "entity_prec": entity_prec, "entity_rec": entity_rec, "entity_f": entity_f, "sentiment_prec": sentiment_prec, "sentiment_rec": sentiment_rec, "sentiment_f": sentiment_f}
+
+    # comparing other smoothing methods
+    
+    # absolute discounting
+    d_values = [0.1 * i for i in range(1, 11)] # d = 0.1, 0.2, ..., 1.0
+    for d in d_values:
+        abs_emission_prob = estimate_emission_parameters_absolute_discounting(train_data, states, observations, state_to_idx, observation_to_idx, d=d)
+        # Run Viterbi on the validation data
+        predicted_tags = viterbi(validation_data, states, state_to_idx, observation_to_idx, abs_emission_prob, transition_prob)
         
+        output_file_path = "Testing\\ru.dev.abs"+str(d)
+        write_predictions_to_file(output_file_path, predicted_tags, validation_data)
+        correct_entity, correct_sentiment, entity_prec, entity_rec, entity_f, sentiment_prec, sentiment_rec, sentiment_f = compute_scores(gold_file_path, output_file_path)
+        
+        results[f"abs_{d}"] = {"correct_entity": correct_entity, "correct_sentiment": correct_sentiment, "entity_prec": entity_prec, "entity_rec": entity_rec, "entity_f": entity_f, "sentiment_prec": sentiment_prec, "sentiment_rec": sentiment_rec, "sentiment_f": sentiment_f}
+    
+    
+    # witten bell smoothing
+    wb_emission_prob = estimate_emission_parameters_witten_bell(train_data, states, observations, state_to_idx, observation_to_idx)
+    predicted_tags = viterbi(validation_data, states, state_to_idx, observation_to_idx, wb_emission_prob, transition_prob)
+    
+    output_file_path = "Testing\\ru.dev.wb"
+    write_predictions_to_file(output_file_path, predicted_tags, validation_data)
+    correct_entity, correct_sentiment, entity_prec, entity_rec, entity_f, sentiment_prec, sentiment_rec, sentiment_f = compute_scores(gold_file_path, output_file_path)
+    
+    results["wb"] = {"correct_entity": correct_entity, "correct_sentiment": correct_sentiment, "entity_prec": entity_prec, "entity_rec": entity_rec, "entity_f": entity_f, "sentiment_prec": sentiment_prec, "sentiment_rec": sentiment_rec, "sentiment_f": sentiment_f}
+    
+    highest_entity_method, highest_sentiment_method = best_results(results)
     
 if __name__ == "__main__":
+    print("--- PREDICTING ES ---")
     predict_es()
+    print("----------------------")
+    print("--- PREDICTING RU ---")
+    print("----------------------")
     predict_ru()
