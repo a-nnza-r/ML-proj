@@ -77,7 +77,7 @@ def transition_parameters(y_i, y_j, transition_count, y_count):
 
 def k_best_viterbi(y_count, emission_count, transition_counts, training_observations_x, x_input_seq, k=1):
     """
-        in this modification of the veterbi algorithm in each entry of the DP memo we store not just a singular best score at the position
+        In this modification of the veterbi algorithm in each entry of the DP memo we store not just a singular best score at the position
         but a sorted list (decreasing order) of k best scores , each computed from a different transition. Also take note that betweeen each 
         transtion from state u at layer j-1 to v at layer j , we must also consider the the trasition from anyone of the k scores stored in scores[(j-1,u)],
         since scores[(j-1,u)] contains k sets of scores , this is becasue each of those score are a result of a different path taken to arrive at node (j-1,u). 
