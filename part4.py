@@ -301,10 +301,7 @@ def best_results(results):
         if result["sentiment_f"] > highest_sentiment_f:
             highest_sentiment_f = result["sentiment_f"]
             highest_sentiment_method = method
-
-    print(f"Best method for entity recognition: {highest_entity_method} with F-score {highest_entity_f}")
-    print(f"Best method for sentiment recognition: {highest_sentiment_method} with F-score {highest_sentiment_f}")
-    
+            
     return highest_entity_method, highest_sentiment_method
 
 def predict_es():
@@ -342,7 +339,7 @@ def predict_es():
     # comparin other smoothing methods
     
     # absolute discounting
-    d_values = [0.1 * i for i in range(1, 11)] # d = 0.1, 0.2, ..., 1.0
+    d_values = [0.01 * i for i in range(1, 101)] # d = 0.1, 0.2, ..., 1.0
     for d in d_values:
         abs_emission_prob = estimate_emission_parameters_absolute_discounting(train_data, states, observations, state_to_idx, observation_to_idx, d=d)
         # Run Viterbi on the validation data
@@ -352,17 +349,49 @@ def predict_es():
         correct_entity, correct_sentiment, entity_prec, entity_rec, entity_f, sentiment_prec, sentiment_rec, sentiment_f = compute_scores(gold_file_path, output_file_path)
         
         results[f"abs_{d}"] = {"correct_entity": correct_entity, "correct_sentiment": correct_sentiment, "entity_prec": entity_prec, "entity_rec": entity_rec, "entity_f": entity_f, "sentiment_prec": sentiment_prec, "sentiment_rec": sentiment_rec, "sentiment_f": sentiment_f}
+    
+    # # witten bell smoothing
+    # wb_emission_prob = estimate_emission_parameters_witten_bell(train_data, states, observations, state_to_idx, observation_to_idx)
+    # predicted_tags = viterbi(validation_data, states, state_to_idx, observation_to_idx, wb_emission_prob, transition_prob)
+    # output_file_path = "Testing\\es.dev.wb"
+    # write_predictions_to_file(output_file_path, predicted_tags, validation_data)
+    # correct_entity, correct_sentiment, entity_prec, entity_rec, entity_f, sentiment_prec, sentiment_rec, sentiment_f = compute_scores(gold_file_path, output_file_path)
+    
+    # results["wb"] = {"correct_entity": correct_entity, "correct_sentiment": correct_sentiment, "entity_prec": entity_prec, "entity_rec": entity_rec, "entity_f": entity_f, "sentiment_prec": sentiment_prec, "sentiment_rec": sentiment_rec, "sentiment_f": sentiment_f}
+    
+    highest_entity_method, highest_sentiment_method = best_results(results)
+    
+    _, sigma = highest_entity_method.split("_") # we know in hindsight after training that the best smoothing method is absolute discounting
+    model_b = estimate_emission_parameters_absolute_discounting(train_data, states, observations, state_to_idx, observation_to_idx, d=float(sigma)) # emission probabilities for model
+    model_a = transition_prob # transition probabilities for model
+    
+    predicted_tags = viterbi(validation_data, states, state_to_idx, observation_to_idx, model_b, model_a)
         
-    # witten bell smoothing
-    wb_emission_prob = estimate_emission_parameters_witten_bell(train_data, states, observations, state_to_idx, observation_to_idx)
-    predicted_tags = viterbi(validation_data, states, state_to_idx, observation_to_idx, wb_emission_prob, transition_prob)
-    output_file_path = "Testing\\es.dev.wb"
+    # add to respective folder
+    output_file_path = "Data\\ES\\dev.p4.out"
     write_predictions_to_file(output_file_path, predicted_tags, validation_data)
     correct_entity, correct_sentiment, entity_prec, entity_rec, entity_f, sentiment_prec, sentiment_rec, sentiment_f = compute_scores(gold_file_path, output_file_path)
     
-    results["wb"] = {"correct_entity": correct_entity, "correct_sentiment": correct_sentiment, "entity_prec": entity_prec, "entity_rec": entity_rec, "entity_f": entity_f, "sentiment_prec": sentiment_prec, "sentiment_rec": sentiment_rec, "sentiment_f": sentiment_f}
+    print("Best results for ES:")
+    print(f"Correct entity: {correct_entity}")
+    print(f"Correct sentiment: {correct_sentiment}")
+    print(f"Entity precision: {entity_prec}")
+    print(f"Entity recall: {entity_rec}")
+    print(f"Entity F: {entity_f}")
+    print(f"Sentiment precision: {sentiment_prec}")
+    print(f"Sentiment recall: {sentiment_rec}")
+    print(f"Sentiment F: {sentiment_f}")
     
-    highest_entity_method, highest_sentiment_method = best_results(results)
+    
+    
+    # predict tags for test data
+    with open("Test\\ES\\test.in", 'r', encoding="utf-8") as f:
+        test_data = f.read()
+        
+    test_output_file_path = "Data\\ES\\test.p4.out"
+
+    predicted_tags = viterbi(test_data, states, state_to_idx, observation_to_idx, model_b, model_a)
+    write_predictions_to_file(test_output_file_path, predicted_tags, test_data)
     
 def predict_ru():
     results = {}
@@ -399,7 +428,7 @@ def predict_ru():
     # comparing other smoothing methods
     
     # absolute discounting
-    d_values = [0.1 * i for i in range(1, 11)] # d = 0.1, 0.2, ..., 1.0
+    d_values = [0.01 * i for i in range(1, 101)] # d = 0.1, 0.2, ..., 1.0
     for d in d_values:
         abs_emission_prob = estimate_emission_parameters_absolute_discounting(train_data, states, observations, state_to_idx, observation_to_idx, d=d)
         # Run Viterbi on the validation data
@@ -413,17 +442,50 @@ def predict_ru():
     
     
     # witten bell smoothing
-    wb_emission_prob = estimate_emission_parameters_witten_bell(train_data, states, observations, state_to_idx, observation_to_idx)
-    predicted_tags = viterbi(validation_data, states, state_to_idx, observation_to_idx, wb_emission_prob, transition_prob)
+    # wb_emission_prob = estimate_emission_parameters_witten_bell(train_data, states, observations, state_to_idx, observation_to_idx)
+    # predicted_tags = viterbi(validation_data, states, state_to_idx, observation_to_idx, wb_emission_prob, transition_prob)
     
-    output_file_path = "Testing\\ru.dev.wb"
-    write_predictions_to_file(output_file_path, predicted_tags, validation_data)
-    correct_entity, correct_sentiment, entity_prec, entity_rec, entity_f, sentiment_prec, sentiment_rec, sentiment_f = compute_scores(gold_file_path, output_file_path)
+    # output_file_path = "Testing\\ru.dev.wb"
+    # write_predictions_to_file(output_file_path, predicted_tags, validation_data)
+    # correct_entity, correct_sentiment, entity_prec, entity_rec, entity_f, sentiment_prec, sentiment_rec, sentiment_f = compute_scores(gold_file_path, output_file_path)
     
-    results["wb"] = {"correct_entity": correct_entity, "correct_sentiment": correct_sentiment, "entity_prec": entity_prec, "entity_rec": entity_rec, "entity_f": entity_f, "sentiment_prec": sentiment_prec, "sentiment_rec": sentiment_rec, "sentiment_f": sentiment_f}
+    # results["wb"] = {"correct_entity": correct_entity, "correct_sentiment": correct_sentiment, "entity_prec": entity_prec, "entity_rec": entity_rec, "entity_f": entity_f, "sentiment_prec": sentiment_prec, "sentiment_rec": sentiment_rec, "sentiment_f": sentiment_f}
     
     highest_entity_method, highest_sentiment_method = best_results(results)
     
+    _, sigma = highest_entity_method.split("_") # we know in hindsight after training that the best smoothing method is absolute discounting
+    model_b = estimate_emission_parameters_absolute_discounting(train_data, states, observations, state_to_idx, observation_to_idx, d=float(sigma)) # emission probabilities for model
+    model_a = transition_prob # transition probabilities for model
+    
+    predicted_tags = viterbi(validation_data, states, state_to_idx, observation_to_idx, model_b, model_a)
+        
+    # add to respective folder
+    output_file_path = "Data\\RU\\dev.p4.out"
+    write_predictions_to_file(output_file_path, predicted_tags, validation_data)
+    correct_entity, correct_sentiment, entity_prec, entity_rec, entity_f, sentiment_prec, sentiment_rec, sentiment_f = compute_scores(gold_file_path, output_file_path)
+    
+    print("Best results for RU:")
+    print(f"Correct entity: {correct_entity}")
+    print(f"Correct sentiment: {correct_sentiment}")
+    print(f"Entity precision: {entity_prec}")
+    print(f"Entity recall: {entity_rec}")
+    print(f"Entity F: {entity_f}")
+    print(f"Sentiment precision: {sentiment_prec}")
+    print(f"Sentiment recall: {sentiment_rec}")
+    print(f"Sentiment F: {sentiment_f}")
+    
+    # predict tags for test data
+    with open("Test\\RU\\test.in", "r", encoding="utf-8") as f:
+        test_data = f.read()
+    
+    
+    test_output_file_path = "Data\\RU\\test.p4.out"
+
+    predicted_tags = viterbi(test_data, states, state_to_idx, observation_to_idx, model_b, model_a)
+    write_predictions_to_file(test_output_file_path, predicted_tags, test_data)
+    
+    
+
 if __name__ == "__main__":
     print("--- PREDICTING ES ---")
     predict_es()
