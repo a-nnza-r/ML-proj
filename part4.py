@@ -155,8 +155,9 @@ def estimate_emission_parameters_witten_bell(train_data, states, observations, s
 
     ### Witten-Bell smoothing ###
     unique_observations_per_state = np.count_nonzero(emission_counts, axis=1)
-    lambdas = unique_observations_per_state / (unique_observations_per_state + state_counts)
-    emission_probabilities = lambdas[:, None] * (emission_counts / state_counts[:, None]) + (1 - lambdas[:, None]) / num_observations
+    lambdas = unique_observations_per_state / (unique_observations_per_state + state_counts) # T / (T + N) where T is the number of unique observations and N is the number of observations of that state
+    
+    emission_probabilities = lambdas[:, None] * (emission_counts / state_counts[:, None]) + (1 - lambdas[:, None]) / num_observations #
 
     emission_probabilities[state_to_idx["START"], :] = 0
     emission_probabilities[state_to_idx["STOP"], :] = 0
@@ -170,7 +171,6 @@ def estimate_emission_parameters_absolute_discounting(train_data, states, observ
     emission_counts = np.zeros((num_states, num_observations))
     state_counts = np.zeros(num_states)
     sentences = train_data.strip().split('\n\n')
-
     for sentence in sentences:
         lines = sentence.strip().split('\n')
         for line in lines:
@@ -179,8 +179,6 @@ def estimate_emission_parameters_absolute_discounting(train_data, states, observ
             observation_idx = observation_to_idx[observation]
             emission_counts[state_idx, observation_idx] += 1
             state_counts[state_idx] += 1
-
-
     # Calculate probabilities with absolute discounting
     
     # the main idea here is to redistribute the weightage of words we observed to words we didn't see before #UNK#
@@ -188,7 +186,6 @@ def estimate_emission_parameters_absolute_discounting(train_data, states, observ
     unk_prob = d * np.count_nonzero(emission_counts, axis=1) / state_counts # Multiply discount d by the number of non-zero emission counts and divide by state counts
     
     emission_probabilities += unk_prob[:, None] / num_observations
-
     emission_probabilities[state_to_idx["START"], :] = 0
     emission_probabilities[state_to_idx["STOP"], :] = 0
 
@@ -197,7 +194,6 @@ def estimate_emission_parameters_absolute_discounting(train_data, states, observ
 def viterbi(test_data, states, state_to_idx, observation_to_idx, emission_probabilities, transmission_probabilities):
     sentences = test_data.strip().split('\n\n')
     predicted_tags = []
-    
     for sentence in sentences: # assume each chunk separated by a newline in the test data is a sentence
         words = sentence.strip().split('\n')
         num_words = len(words)
@@ -270,21 +266,16 @@ def compute_scores(gold_file_path, predicted_file_path):
     ## code adapted from evalResult ##
     gold = open(gold_file_path, "r", encoding="utf-8")
     predicted = open(predicted_file_path, "r", encoding="utf-8")
-
     #column separator
     separator = ' '
-
     #the column index for tags
     outputColumnIndex = 1
-    
     #Read Gold data
     observed = evalResult.get_observed(gold, separator, outputColumnIndex)
-
     #Read Predction data
     predicted = evalResult.get_predicted(predicted, separator, outputColumnIndex)
-
     correct_entity, correct_sentiment, entity_prec, entity_rec, entity_f, sentiment_prec, sentiment_rec, sentiment_f = evalResult.compare_observed_to_predicted(observed, predicted)
-    
+
     return correct_entity, correct_sentiment, entity_prec, entity_rec, entity_f, sentiment_prec, sentiment_rec, sentiment_f
 
 def best_results(results):
@@ -317,7 +308,8 @@ def predict_es():
         
     # Define a range of k values to try
     k_values = [0.1 * i for i in range(1, 11)] # k = 0.1, 0.2, ..., 1.0
-
+    d_values = [0.01 * i for i in range(1, 101)] # d = 0.1, 0.2, ..., 1.0
+    
     transition_prob = estimate_transmission_parameters(train_data, states, state_to_idx)
 
     # Iterate through each k value
@@ -336,10 +328,10 @@ def predict_es():
         
         results[f"laplace_{k}"] = {"correct_entity": correct_entity, "correct_sentiment": correct_sentiment, "entity_prec": entity_prec, "entity_rec": entity_rec, "entity_f": entity_f, "sentiment_prec": sentiment_prec, "sentiment_rec": sentiment_rec, "sentiment_f": sentiment_f}
 
-    # comparin other smoothing methods
+    # comparing other smoothing methods
     
     # absolute discounting
-    d_values = [0.01 * i for i in range(1, 101)] # d = 0.1, 0.2, ..., 1.0
+    
     for d in d_values:
         abs_emission_prob = estimate_emission_parameters_absolute_discounting(train_data, states, observations, state_to_idx, observation_to_idx, d=d)
         # Run Viterbi on the validation data
@@ -351,13 +343,13 @@ def predict_es():
         results[f"abs_{d}"] = {"correct_entity": correct_entity, "correct_sentiment": correct_sentiment, "entity_prec": entity_prec, "entity_rec": entity_rec, "entity_f": entity_f, "sentiment_prec": sentiment_prec, "sentiment_rec": sentiment_rec, "sentiment_f": sentiment_f}
     
     # # witten bell smoothing
-    # wb_emission_prob = estimate_emission_parameters_witten_bell(train_data, states, observations, state_to_idx, observation_to_idx)
-    # predicted_tags = viterbi(validation_data, states, state_to_idx, observation_to_idx, wb_emission_prob, transition_prob)
-    # output_file_path = "Testing\\es.dev.wb"
-    # write_predictions_to_file(output_file_path, predicted_tags, validation_data)
-    # correct_entity, correct_sentiment, entity_prec, entity_rec, entity_f, sentiment_prec, sentiment_rec, sentiment_f = compute_scores(gold_file_path, output_file_path)
+    wb_emission_prob = estimate_emission_parameters_witten_bell(train_data, states, observations, state_to_idx, observation_to_idx)
+    predicted_tags = viterbi(validation_data, states, state_to_idx, observation_to_idx, wb_emission_prob, transition_prob)
+    output_file_path = "Testing\\es.dev.wb"
+    write_predictions_to_file(output_file_path, predicted_tags, validation_data)
+    correct_entity, correct_sentiment, entity_prec, entity_rec, entity_f, sentiment_prec, sentiment_rec, sentiment_f = compute_scores(gold_file_path, output_file_path)
     
-    # results["wb"] = {"correct_entity": correct_entity, "correct_sentiment": correct_sentiment, "entity_prec": entity_prec, "entity_rec": entity_rec, "entity_f": entity_f, "sentiment_prec": sentiment_prec, "sentiment_rec": sentiment_rec, "sentiment_f": sentiment_f}
+    results["wb"] = {"correct_entity": correct_entity, "correct_sentiment": correct_sentiment, "entity_prec": entity_prec, "entity_rec": entity_rec, "entity_f": entity_f, "sentiment_prec": sentiment_prec, "sentiment_rec": sentiment_rec, "sentiment_f": sentiment_f}
     
     highest_entity_method, highest_sentiment_method = best_results(results)
     
@@ -371,18 +363,6 @@ def predict_es():
     output_file_path = "Data\\ES\\dev.p4.out"
     write_predictions_to_file(output_file_path, predicted_tags, validation_data)
     correct_entity, correct_sentiment, entity_prec, entity_rec, entity_f, sentiment_prec, sentiment_rec, sentiment_f = compute_scores(gold_file_path, output_file_path)
-    
-    print("Best results for ES:")
-    print(f"Correct entity: {correct_entity}")
-    print(f"Correct sentiment: {correct_sentiment}")
-    print(f"Entity precision: {entity_prec}")
-    print(f"Entity recall: {entity_rec}")
-    print(f"Entity F: {entity_f}")
-    print(f"Sentiment precision: {sentiment_prec}")
-    print(f"Sentiment recall: {sentiment_rec}")
-    print(f"Sentiment F: {sentiment_f}")
-    
-    
     
     # predict tags for test data
     with open("Test\\ES\\test.in", 'r', encoding="utf-8") as f:
@@ -442,14 +422,14 @@ def predict_ru():
     
     
     # witten bell smoothing
-    # wb_emission_prob = estimate_emission_parameters_witten_bell(train_data, states, observations, state_to_idx, observation_to_idx)
-    # predicted_tags = viterbi(validation_data, states, state_to_idx, observation_to_idx, wb_emission_prob, transition_prob)
+    wb_emission_prob = estimate_emission_parameters_witten_bell(train_data, states, observations, state_to_idx, observation_to_idx)
+    predicted_tags = viterbi(validation_data, states, state_to_idx, observation_to_idx, wb_emission_prob, transition_prob)
     
-    # output_file_path = "Testing\\ru.dev.wb"
-    # write_predictions_to_file(output_file_path, predicted_tags, validation_data)
-    # correct_entity, correct_sentiment, entity_prec, entity_rec, entity_f, sentiment_prec, sentiment_rec, sentiment_f = compute_scores(gold_file_path, output_file_path)
+    output_file_path = "Testing\\ru.dev.wb"
+    write_predictions_to_file(output_file_path, predicted_tags, validation_data)
+    correct_entity, correct_sentiment, entity_prec, entity_rec, entity_f, sentiment_prec, sentiment_rec, sentiment_f = compute_scores(gold_file_path, output_file_path)
     
-    # results["wb"] = {"correct_entity": correct_entity, "correct_sentiment": correct_sentiment, "entity_prec": entity_prec, "entity_rec": entity_rec, "entity_f": entity_f, "sentiment_prec": sentiment_prec, "sentiment_rec": sentiment_rec, "sentiment_f": sentiment_f}
+    results["wb"] = {"correct_entity": correct_entity, "correct_sentiment": correct_sentiment, "entity_prec": entity_prec, "entity_rec": entity_rec, "entity_f": entity_f, "sentiment_prec": sentiment_prec, "sentiment_rec": sentiment_rec, "sentiment_f": sentiment_f}
     
     highest_entity_method, highest_sentiment_method = best_results(results)
     
@@ -464,15 +444,6 @@ def predict_ru():
     write_predictions_to_file(output_file_path, predicted_tags, validation_data)
     correct_entity, correct_sentiment, entity_prec, entity_rec, entity_f, sentiment_prec, sentiment_rec, sentiment_f = compute_scores(gold_file_path, output_file_path)
     
-    print("Best results for RU:")
-    print(f"Correct entity: {correct_entity}")
-    print(f"Correct sentiment: {correct_sentiment}")
-    print(f"Entity precision: {entity_prec}")
-    print(f"Entity recall: {entity_rec}")
-    print(f"Entity F: {entity_f}")
-    print(f"Sentiment precision: {sentiment_prec}")
-    print(f"Sentiment recall: {sentiment_rec}")
-    print(f"Sentiment F: {sentiment_f}")
     
     # predict tags for test data
     with open("Test\\RU\\test.in", "r", encoding="utf-8") as f:
@@ -487,7 +458,9 @@ def predict_ru():
     
 
 if __name__ == "__main__":
+    print("----------------------")
     print("--- PREDICTING ES ---")
+    print("----------------------")
     predict_es()
     print("----------------------")
     print("--- PREDICTING RU ---")
